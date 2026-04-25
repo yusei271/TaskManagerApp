@@ -1,3 +1,5 @@
 venv/
 .DS_Store
 tasks.jason
+tasks.db
+__pycache__/
