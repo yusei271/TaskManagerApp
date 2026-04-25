@@ -3,3 +3,4 @@ venv/
 tasks.jason
 tasks.db
 __pycache__/
+tasks.json
