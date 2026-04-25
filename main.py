@@ -1,57 +1,55 @@
-import json
-import os
+import logging
+from fastapi import FastAPI, HTTPException
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
-TASKS_FILE = "tasks.json"
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-def load_tasks():
-    if os.path.exists(TASKS_FILE):
-        with open(TASKS_FILE, "r") as f:
-            return json.load(f)
-    return []
+DATABASE_URL = "sqlite:///tasks.db"
+engine = create_engine(DATABASE_URL)
+Base = declarative_base()
+SessionLocal = sessionmaker(bind=engine)
 
-def save_tasks():
-    with open(TASKS_FILE, "w") as f:
-        json.dump(tasks, f)
+class Task(Base):
+    __tablename__ = "tasks"
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
 
-tasks = load_tasks()
+Base.metadata.create_all(bind=engine)
 
-def show_tasks():
-    if len(tasks) == 0:
+app = FastAPI()
 
-        print("No tasks found")
-    else:
-        for task in tasks:
-            print(f"{task['id']}: {task['title']}")
+@app.get("/tasks")
+def get_tasks():
+    db = SessionLocal()
+    tasks = db.query(Task).all()
+    db.close()
+    logger.info("Fetched all tasks")
+    return tasks
 
-def add_task(title):
-    task = {
-        "id": len(tasks),
-        "title": title
-    }
-    tasks.append(task)
-    print(f"added task: {title}")
-    save_tasks()
+@app.post("/tasks")
+def add_task(title: str):
+    db = SessionLocal()
+    task = Task(title=title)
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    db.close()
+    logger.info(f"Task added: {title}")
+    return task
 
-def remove_task(task_id):
-    for task in tasks:
-        if task["id"] == task_id:
-            tasks.remove(task)
-            print(f"removed task: {task['title']}")
-            return
-    print("Task not found")
-    save_tasks()
-
-while True:
-    print("\n1: Show all tasks / 2: Add a task / 3: Remove a task / 4: Exit")
-    choice = input("Enter your choice: ")
-
-    if choice == "1":
-        show_tasks()
-    elif choice == "2":
-        title = input("Enter the task title: ")
-        add_task(title)
-    elif choice == "3":
-        task_id = int(input("Enter the task id to remove: "))
-        remove_task(task_id)
-    elif choice == "4":
-        break
+@app.delete("/tasks/{task_id}")
+def remove_task(task_id: int):
+    db = SessionLocal()
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        db.close()
+        logger.warning(f"Task not found: {task_id}")
+        raise HTTPException(status_code=404, detail="Task not found")
+    db.delete(task)
+    db.commit()
+    db.close()
+    logger.info(f"Task removed: {task_id}")
+    return {"message": "removed"}
